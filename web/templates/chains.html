@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Цепочки запросов</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        pre.json-output {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .request-sequence {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+        }
+        .request-box {
+            width: 60px;
+            height: 60px;
+            background-color: #007bff;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-bottom: 20px;
+        }
+        .flagged-request, .flagged-chain {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .flag-in-out {
+            background-color: #FEBE10;
+            transition: transform 0.3s, background-color 0.3s;
+        }
+        .flag-in-out:hover {
+            background-color: #FFD83C;
+            cursor: pointer;
+        }
+
+        .flag-in {
+            background-color: green;
+            color: white;
+            transition: transform 0.3s, background-color 0.3s;
+        }
+        .flag-in:hover {
+            background-color: #28a745;
+            cursor: pointer;
+        }
+
+        .flag-out {
+            background-color: #f8d7da;
+            color: #721c24;
+            transition: transform 0.3s, background-color 0.3s;
+        }
+        .flag-out:hover {
+            background-color: #f5c6cb;
+            cursor: pointer;
+        }
+        .arrow {
+            font-size: 20px;
+            margin: 0 5px;
+            align-self: center;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Цепочки запросов</a>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/logs">Запросы</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/chains">Цепочки</a>
+                    </li>
+                </ul>
+                <a href="/download-traffic-dump" class="btn btn-outline-light" role="button" download="traffic_dump.pcap">Скачать pcap</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-4">
+        <h1 class="mb-4">Все цепочки</h1>
+
+        <!-- Фильтры -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <label for="sourceIpFilter" class="form-label">Источник запроса</label>
+                <input type="text" id="sourceIpFilter" class="form-control" placeholder="IP-адрес">
+            </div>
+            <div class="col-md-3">
+                <label for="portFilter" class="form-label">Порт</label>
+                <select id="portFilter" class="form-control">
+                    <option value="">Все</option>
+                    <!-- Порты будут загружены динамически -->
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="startTimeFilter" class="form-label">Начало</label>
+                <input type="datetime-local" id="startTimeFilter" class="form-control">
+            </div>
+            <div class="col-md-3">
+                <label for="endTimeFilter" class="form-label">Конец</label>
+                <input type="datetime-local" id="endTimeFilter" class="form-control">
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-4">
+                <div class="list-group" id="chain-list">
+                    <!-- Цепочки будут загружены динамически через JavaScript -->
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="request-sequence" id="request-sequence">
+                        <!-- Request sequence boxes will be dynamically generated here -->
+                    </div>
+                    <button id="download-chain-code" class="btn btn-primary" style="display: none;" onclick="downloadChainCode()">Скачать код для цепочки</button>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>Общие данные</span>
+                        <button id="download-request-code" class="btn btn-sm btn-primary" style="display: none;" onclick="downloadRequestCode()">Скачать код запроса</button>
+                    </div>
+                    <div class="card-body">
+                        <pre id="general-info" class="json-output">Выберите запрос для отображения данных</pre>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">Запрос</div>
+                    <div class="card-body">
+                        <pre id="request-info" class="json-output">Выберите запрос для отображения данных</pre>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">Ответ</div>
+                    <div class="card-body">
+                        <pre id="response-info" class="json-output">Выберите запрос для отображения данных</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let lastTimestamp = 0;
+        let selectedRequestId = null;
+        let selectedChainId = null;
+
+        async function loadPorts() {
+            try {
+                const response = await fetch('/api/ports');
+                if (response.ok) {
+                    const ports = await response.json();
+                    const portFilter = document.getElementById("portFilter");
+                    ports.forEach(port => {
+                        const option = document.createElement("option");
+                        option.value = port;
+                        option.textContent = port;
+                        portFilter.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error("Ошибка загрузки портов:", error);
+            }
+        }
+
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp * 1000);
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const seconds = String(date.getSeconds()).padStart(2, '0');
+            return `${hours}:${minutes}:${seconds}`;
+        }
+
+        function getFilters() {
+            const sourceIp = document.getElementById("sourceIpFilter").value;
+            const port = document.getElementById("portFilter").value;
+            const startTime = document.getElementById("startTimeFilter").value;
+            const endTime = document.getElementById("endTimeFilter").value;
+
+            const filters = {
+                limit: 1000,
+                offset: 0
+            };
+            if (sourceIp) filters.source_ip = sourceIp;
+            if (port) filters.port = port;
+            if (startTime) filters.start_time = new Date(startTime).toISOString();
+            if (endTime) filters.end_time = new Date(endTime).toISOString();
+            return filters;
+        }
+
+        async function loadChains() {
+            const filters = getFilters();
+            const queryString = new URLSearchParams(filters).toString();
+
+            try {
+                const response = await fetch(`/api/chains?${queryString}`);
+                if (!response.ok) throw new Error("Ошибка загрузки цепочек");
+
+                const chains = await response.json();
+                const chainList = document.getElementById("chain-list");
+                chainList.innerHTML = '';
+
+                chains.forEach(chain => addChainToList(chain));
+                if (chains.length > 0) {
+                    lastTimestamp = chains[chains.length - 1].end_timestamp;
+                }
+            } catch (error) {
+                console.error("Ошибка:", error);
+            }
+        }
+
+        function addChainToList(chain) {
+            const chainList = document.getElementById("chain-list");
+            const chainItem = document.createElement("button");
+            chainItem.className = "list-group-item list-group-item-action";
+
+            chainItem.textContent = `${chain.client_ip} -> ${chain.service_ip}:${chain.service_port} (${formatTimestamp(chain.start_timestamp)}-${formatTimestamp(chain.end_timestamp)})`;
+
+            const flagsInfo = document.createElement("div");
+            flagsInfo.className = "mt-1";
+
+            if (chain.flag_in === 1) {
+                const flagIn = document.createElement("span");
+                flagIn.textContent = "flag_in";
+                flagIn.style.color = "green";
+                flagsInfo.appendChild(flagIn);
+            }
+
+            if (chain.flag_out === 1) {
+                const flagOut = document.createElement("span");
+                flagOut.textContent = "flag_out";
+                flagOut.style.color = "red";
+                if (flagsInfo.childNodes.length > 0) {
+                    flagsInfo.appendChild(document.createTextNode(" | "));
+                }
+                flagsInfo.appendChild(flagOut);
+            }
+
+            chainItem.appendChild(flagsInfo);
+
+            chainItem.onclick = () => fetchChainDetails(chain.id);
+            chainList.prepend(chainItem);
+        }
+
+        async function fetchChainDetails(chainId) {
+            try {
+                const response = await fetch(`/api/chains/${chainId}`);
+                if (!response.ok) throw new Error("Ошибка загрузки данных");
+
+                const chain = await response.json();
+                selectedChainId = chainId;
+                document.getElementById("download-chain-code").style.display = "inline";
+                renderRequestSequence(chain.requests);
+            } catch (error) {
+                console.error("Ошибка:", error);
+            }
+        }
+
+        function renderRequestSequence(requests) {
+            const requestSequence = document.getElementById("request-sequence");
+            requestSequence.innerHTML = '';
+
+            requests.forEach((request, index) => {
+                const requestBox = document.createElement("div");
+                requestBox.className = "request-box";
+                requestBox.textContent = index + 1;
+
+                if (request.flag_in && request.flag_out) {
+                    requestBox.classList.add("flag-in-out");
+                }
+                else {
+                    if (request.flag_in) {
+                        requestBox.classList.add("flag-in");
+                    }
+                    if (request.flag_out) {
+                        requestBox.classList.add("flag-out");
+                    }
+                }
+
+                requestBox.onclick = () => {
+                    showRequestDetails(request);
+                    selectedRequestId = request.id;
+                    document.getElementById("download-request-code").style.display = "inline";
+                };
+                requestSequence.appendChild(requestBox);
+
+                if (index < requests.length - 1) {
+                    const arrow = document.createElement("span");
+                    arrow.className = "arrow";
+                    arrow.textContent = "→";
+                    requestSequence.appendChild(arrow);
+                }
+            });
+
+            showRequestDetails(requests[0]);
+            selectedRequestId = requests[0].id;
+            document.getElementById("download-request-code").style.display = "inline";
+        }
+
+        function showRequestDetails(request) {
+            document.getElementById("general-info").textContent = JSON.stringify({
+                id: request.id,
+                service_ip: request.service_ip,
+                service_port: request.service_port,
+                client_ip: request.client_ip,
+                client_port: request.client_port
+            }, null, 2);
+
+            document.getElementById("request-info").textContent = JSON.stringify(request.request, null, 2);
+            document.getElementById("response-info").textContent = JSON.stringify(request.response, null, 2);
+        }
+
+        async function checkForUpdates() {
+            const filters = getFilters();
+            filters.last_timestamp = lastTimestamp
+            const queryString = new URLSearchParams(filters).toString();
+
+            const response = await fetch(`/api/check-updates-chains?${queryString}`);
+            if (response.ok) {
+                const data = await response.json();
+                const { new_chains } = data;
+
+                if (new_chains.length > 0) {
+                    new_chains.forEach(chain => addChainToList(chain));
+                    lastTimestamp = new_chains[new_chains.length - 1].end_timestamp;
+                }
+            }
+        }
+
+        function downloadChainCode() {
+            if (selectedChainId) {
+                window.location.href = `/api/generate_code/chain/${selectedChainId}`;
+            }
+        }
+
+        function downloadRequestCode() {
+            if (selectedRequestId) {
+                window.location.href = `/api/generate_code/log/${selectedRequestId}`;
+            }
+        }
+
+        document.getElementById("sourceIpFilter").addEventListener("input", loadChains);
+        document.getElementById("portFilter").addEventListener("change", loadChains);
+        document.getElementById("startTimeFilter").addEventListener("change", loadChains);
+        document.getElementById("endTimeFilter").addEventListener("change", loadChains);
+
+        loadPorts();
+        loadChains();
+        setInterval(checkForUpdates, 2000);
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Запросы</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        pre.json-output {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .flagged {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Логи</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/logs">Запросы</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/chains">Цепочки</a>
+                    </li>
+                </ul>
+                <a href="/download-traffic-dump" class="btn btn-outline-light" role="button" download="traffic_dump.pcap">Скачать pcap</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-4">
+        <h1 class="mb-4">Все запросы</h1>
+
+        <!-- Фильтры -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <label for="sourceIpFilter" class="form-label">Источник запроса</label>
+                <input type="text" id="sourceIpFilter" class="form-control" placeholder="IP-адрес">
+            </div>
+            <div class="col-md-3">
+                <label for="portFilter" class="form-label">Порт</label>
+                <select id="portFilter" class="form-control">
+                    <option value="">Все</option>
+                    <!-- Порты будут загружены динамически -->
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="startTimeFilter" class="form-label">Начало</label>
+                <input type="datetime-local" id="startTimeFilter" class="form-control">
+            </div>
+            <div class="col-md-3">
+                <label for="endTimeFilter" class="form-label">Конец</label>
+                <input type="datetime-local" id="endTimeFilter" class="form-control">
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-4">
+                <div class="list-group" id="log-list">
+                    <!-- Логи будут загружены динамически через JavaScript -->
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>Подробности запроса</span>
+                        <button id="download-request-code" class="btn btn-sm btn-primary" style="display: none;" onclick="downloadRequestCode()">Скачать код запроса</button>
+                    </div>
+                    <div class="card-body">
+                        <pre id="request-details" class="json-output">Выберите запрос для отображения подробностей</pre>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>Ответ</span>
+                        <button id="download-body" class="btn btn-sm btn-primary" style="display: none;" onclick="downloadBody()">Скачать body</button>
+                    </div>
+                    <div class="card-body">
+                        <pre id="response-details" class="json-output">Выберите запрос для отображения ответа</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let lastLogId = 0;
+        let currentBody = null;
+        let selectedLogId = null;
+
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+
+        async function loadPorts() {
+            try {
+                const response = await fetch('/api/ports');
+                if (response.ok) {
+                    const ports = await response.json();
+                    const portFilter = document.getElementById("portFilter");
+                    ports.forEach(port => {
+                        const option = document.createElement("option");
+                        option.value = port;
+                        option.textContent = port;
+                        portFilter.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error("Ошибка загрузки портов:", error);
+            }
+        }
+
+        async function loadLogs() {
+            const filters = getFilters();
+            const queryString = new URLSearchParams(filters).toString();
+            try {
+                const response = await fetch(`/api/logs?${queryString}`);
+                if (!response.ok) throw new Error("Ошибка загрузки логов");
+
+                const logs = await response.json();
+                const logList = document.getElementById("log-list");
+                logList.innerHTML = '';
+
+                logs.forEach(log => addLog(log));
+                if (logs.length > 0) {
+                    lastLogId = logs[logs.length - 1].id;
+                }
+            } catch (error) {
+                console.error("Ошибка:", error);
+            }
+        }
+
+        function addLog(log) {
+            const logList = document.getElementById("log-list");
+
+            const logItem = document.createElement("button");
+            logItem.className = "list-group-item list-group-item-action";
+
+            if (log.flags) {
+                logItem.classList.add("flagged");
+            }
+
+            logItem.textContent = `${log.client_ip} -> ${log.service_ip}:${log.service_port} (${formatTimestamp(log.timestamp)})`;
+
+            const flagsInfo = document.createElement("div");
+            flagsInfo.className = "mt-1";
+
+            if (log.flag_in === 1) {
+                const flagIn = document.createElement("span");
+                flagIn.textContent = "flag_in";
+                flagIn.style.color = "green";
+                flagsInfo.appendChild(flagIn);
+            }
+
+            if (log.flag_out === 1) {
+                const flagOut = document.createElement("span");
+                flagOut.textContent = "flag_out";
+                flagOut.style.color = "red";
+                if (flagsInfo.childNodes.length > 0) {
+                    flagsInfo.appendChild(document.createTextNode(" | "));
+                }
+                flagsInfo.appendChild(flagOut);
+            }
+
+            logItem.appendChild(flagsInfo);
+
+            logItem.onclick = () => fetchLogDetails(log.id);
+
+            logList.prepend(logItem);
+        }
+
+        async function fetchLogDetails(logId) {
+            try {
+                const response = await fetch(`/api/logs/${logId}`);
+                if (!response.ok) throw new Error("Ошибка загрузки данных");
+
+                const log = await response.json();
+                selectedLogId = logId;
+                document.getElementById("download-request-code").style.display = "inline";
+
+                document.getElementById("request-details").textContent = JSON.stringify(log.request, null, 2);
+                document.getElementById("response-details").textContent = JSON.stringify(log.response, null, 2);
+
+                if (log.response && log.response.body) {
+                    currentBody = log.response.body;
+                    document.getElementById("download-body").style.display = "inline";
+                } else {
+                    currentBody = null;
+                    document.getElementById("download-body").style.display = "none";
+                }
+            } catch (error) {
+                console.error("Ошибка:", error);
+            }
+        }
+
+        function downloadBody() {
+            if (currentBody) {
+                const blob = new Blob([currentBody], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'response_body.txt';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+        }
+
+        function downloadRequestCode() {
+            if (selectedLogId) {
+                window.location.href = `/api/generate_code/log/${selectedLogId}`;
+            }
+        }
+
+        function getFilters() {
+            const sourceIp = document.getElementById("sourceIpFilter").value;
+            const port = document.getElementById("portFilter").value;
+            const startTime = document.getElementById("startTimeFilter").value;
+            const endTime = document.getElementById("endTimeFilter").value;
+
+            const filters = {
+                limit: 1000,
+                offset: 0
+            };
+            if (sourceIp) filters.source_ip = sourceIp;
+            if (port) filters.port = port;
+            if (startTime) filters.start_time = new Date(startTime).toISOString();
+            if (endTime) filters.end_time = new Date(endTime).toISOString();
+            return filters;
+        }
+
+        async function checkForUpdates() {
+            const filters = getFilters();
+            filters.last_log_id = lastLogId;
+            const queryString = new URLSearchParams(filters).toString();
+
+            const response = await fetch(`/api/check-updates-logs?${queryString}`);
+            if (response.ok) {
+                const data = await response.json();
+                const { new_logs } = data;
+
+                if (new_logs.length > 0) {
+                    new_logs.forEach(log => addLog(log));
+                    lastLogId = new_logs[new_logs.length - 1].id;
+                }
+            }
+        }
+
+        document.getElementById("sourceIpFilter").addEventListener("input", loadLogs);
+        document.getElementById("portFilter").addEventListener("change", loadLogs);
+        document.getElementById("startTimeFilter").addEventListener("change", loadLogs);
+        document.getElementById("endTimeFilter").addEventListener("change", loadLogs);
+
+        loadPorts();
+        loadLogs();
+        setInterval(checkForUpdates, 2000);
+
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

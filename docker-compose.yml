@@ -1,0 +1,25 @@
+version: "3.9"
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    privileged: true
+    network_mode: host
+    env_file:
+      - .env
+    volumes:
+      - ./database:/database
+      - ./dump:/dump
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    privileged: true
+    network_mode: host
+    env_file:
+      - .env
+    volumes:
+      - ./database:/database
+      - ./dump:/dump

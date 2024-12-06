@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+WORKDIR /web
+
+COPY requirements.txt /web
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY ./web /web
+
+EXPOSE 4910
+
+CMD ["python", "main.py"]
