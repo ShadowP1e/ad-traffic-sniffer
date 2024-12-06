@@ -8,4 +8,4 @@ router = APIRouter(prefix='/api')
 
 @router.get("/ports", response_class=JSONResponse, dependencies=[Depends(verify_cookie_token)])
 async def get_ports():
-    return JSONResponse(config.SERVICES_PORTS)
+    return JSONResponse(config.SERVICES)

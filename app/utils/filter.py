@@ -3,7 +3,7 @@ import re
 
 
 def create_bpf_filter(port_protocol_map):
-    return " or ".join([f"tcp port {port}" for port in port_protocol_map.values()])
+    return " or ".join([f"tcp port {port}" for port in port_protocol_map.keys()])
 
 def convert_to_decode_as(port_protocol_map):
     return {

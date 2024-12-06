@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -10,7 +11,7 @@ class Config:
     APP_HOST = os.getenv('APP_HOST')
     APP_PORT = os.getenv('APP_PORT')
 
-    SERVICES_PORTS = os.getenv('SERVICES_PORTS').split(',')
+    SERVICES = list(item.split(':')[0] for item in os.getenv('SERVICES').split(','))
 
     VALID_USERNAME = os.getenv("APP_USERNAME", "admin")
     VALID_PASSWORD = os.getenv("APP_PASSWORD", "password")
