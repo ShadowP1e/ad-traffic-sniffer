@@ -12,7 +12,7 @@ class Config:
 
     INTERFACE = os.getenv('INTERFACE', None)
 
-    SERVICES_PORTS = os.getenv('SERVICES_PORTS').split(',')
+    SERVICES = dict(item.split(":") for item in os.getenv('SERVICES', '').split(","))
 
     TRAFFIC_DUMP_FILE_PATH = os.path.join(os.path.dirname(__file__), '..', 'dump', 'traffic_dump.pcap')
     DATABASE_PATH = os.path.join(os.path.dirname(__file__), '..', 'database', 'db.db')

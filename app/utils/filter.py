@@ -2,9 +2,14 @@ import os
 import re
 
 
-def create_bpf_filter(ports):
-    return " or ".join([f"tcp port {port}" for port in ports])
+def create_bpf_filter(port_protocol_map):
+    return " or ".join([f"tcp port {port}" for port in port_protocol_map.values()])
 
+def convert_to_decode_as(port_protocol_map):
+    return {
+        f"tcp.port=={port}": protocol
+        for port, protocol in port_protocol_map.items() if protocol not in ["tcp", "udp"]
+    }
 
 def rename_traffic_dump(file_path):
     directory, file_name = os.path.split(file_path)

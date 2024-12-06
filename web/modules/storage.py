@@ -1,7 +1,7 @@
 import logging
 import sqlite3
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 from utils.format import format_http_data
 
@@ -70,11 +70,11 @@ class Storage:
             query += " AND timestamp <= ?"
             params.append(int(end_time.timestamp()))
 
-        query += " ORDER BY timestamp LIMIT ? OFFSET ?"
+        query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
         cursor = self.conn.execute(query, params)
-        return [dict(row) for row in cursor.fetchall()]
+        return [dict(row) for row in cursor.fetchall()[::-1]]
 
     def get_new_logs(self, last_log_id: int, source_ip: str | None = None, port: int | None = None,
                      start_time: datetime | None = None, end_time: datetime | None = None) -> list[dict[str, Any]]:
@@ -117,11 +117,11 @@ class Storage:
             query += " AND end_timestamp <= ?"
             params.append(int(end_time.timestamp()))
 
-        query += " ORDER BY start_timestamp LIMIT ? OFFSET ?"
+        query += " ORDER BY start_timestamp DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
         cursor = self.conn.execute(query, params)
-        return [dict(row) for row in cursor.fetchall()]
+        return [dict(row) for row in cursor.fetchall()[::-1]]
 
 
     def get_updated_chains(self, last_timestamp: int, source_ip: str | None = None,

@@ -18,6 +18,12 @@
             background-color: #f8d7da;
             color: #721c24;
         }
+
+        #log-list{
+            overflow-y: scroll;
+            overflow-x: hidden;
+            height: 500px;
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -144,15 +150,14 @@
             }
         }
 
+
         function addLog(log) {
             const logList = document.getElementById("log-list");
 
             const logItem = document.createElement("button");
             logItem.className = "list-group-item list-group-item-action";
 
-            if (log.flags) {
-                logItem.classList.add("flagged");
-            }
+            const isScrolledToBottom = logList.scrollHeight - logList.scrollTop <= logList.clientHeight + 10;
 
             logItem.textContent = `${log.client_ip} -> ${log.service_ip}:${log.service_port} (${formatTimestamp(log.timestamp)})`;
 
@@ -180,7 +185,11 @@
 
             logItem.onclick = () => fetchLogDetails(log.id);
 
-            logList.prepend(logItem);
+            logList.appendChild(logItem);
+
+            if (isScrolledToBottom) {
+                logList.scrollTop = logList.scrollHeight;
+            }
         }
 
         async function fetchLogDetails(logId) {
@@ -234,7 +243,7 @@
             const endTime = document.getElementById("endTimeFilter").value;
 
             const filters = {
-                limit: 1000,
+                limit: 400,
                 offset: 0
             };
             if (sourceIp) filters.source_ip = sourceIp;

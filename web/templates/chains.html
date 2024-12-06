@@ -71,6 +71,12 @@
             align-self: center;
             margin-bottom: 20px;
         }
+
+        #chain-list{
+            overflow-y: scroll;
+            overflow-x: hidden;
+            height: 500px;
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -196,7 +202,7 @@
             const endTime = document.getElementById("endTimeFilter").value;
 
             const filters = {
-                limit: 1000,
+                limit: 400,
                 offset: 0
             };
             if (sourceIp) filters.source_ip = sourceIp;
@@ -226,38 +232,75 @@
                 console.error("Ошибка:", error);
             }
         }
-
         function addChainToList(chain) {
             const chainList = document.getElementById("chain-list");
-            const chainItem = document.createElement("button");
-            chainItem.className = "list-group-item list-group-item-action";
 
-            chainItem.textContent = `${chain.client_ip} -> ${chain.service_ip}:${chain.service_port} (${formatTimestamp(chain.start_timestamp)}-${formatTimestamp(chain.end_timestamp)})`;
+            let existingChainItem = [...chainList.children].find(item => item.dataset.chainId == chain.id);
 
-            const flagsInfo = document.createElement("div");
-            flagsInfo.className = "mt-1";
+            const isScrolledToBottom = chainList.scrollHeight - chainList.scrollTop <= chainList.clientHeight + 10;
 
-            if (chain.flag_in === 1) {
-                const flagIn = document.createElement("span");
-                flagIn.textContent = "flag_in";
-                flagIn.style.color = "green";
-                flagsInfo.appendChild(flagIn);
-            }
+            if (existingChainItem) {
+                existingChainItem.textContent = `${chain.client_ip} -> ${chain.service_ip}:${chain.service_port} (${formatTimestamp(chain.start_timestamp)}-${formatTimestamp(chain.end_timestamp)})`;
 
-            if (chain.flag_out === 1) {
-                const flagOut = document.createElement("span");
-                flagOut.textContent = "flag_out";
-                flagOut.style.color = "red";
-                if (flagsInfo.childNodes.length > 0) {
-                    flagsInfo.appendChild(document.createTextNode(" | "));
+                const flagsInfo = document.createElement("div");
+                flagsInfo.className = "mt-1";
+
+                if (chain.flag_in === 1) {
+                    const flagIn = document.createElement("span");
+                    flagIn.textContent = "flag_in";
+                    flagIn.style.color = "green";
+                    flagsInfo.appendChild(flagIn);
                 }
-                flagsInfo.appendChild(flagOut);
+
+                if (chain.flag_out === 1) {
+                    const flagOut = document.createElement("span");
+                    flagOut.textContent = "flag_out";
+                    flagOut.style.color = "red";
+                    if (flagsInfo.childNodes.length > 0) {
+                        flagsInfo.appendChild(document.createTextNode(" | "));
+                    }
+                    flagsInfo.appendChild(flagOut);
+                }
+
+                existingChainItem.innerHTML = existingChainItem.textContent;
+                existingChainItem.appendChild(flagsInfo);
+
+            } else {
+                const chainItem = document.createElement("button");
+                chainItem.className = "list-group-item list-group-item-action";
+                chainItem.dataset.chainId = chain.id;
+
+                chainItem.textContent = `${chain.client_ip} -> ${chain.service_ip}:${chain.service_port} (${formatTimestamp(chain.start_timestamp)}-${formatTimestamp(chain.end_timestamp)})`;
+
+                const flagsInfo = document.createElement("div");
+                flagsInfo.className = "mt-1";
+
+                if (chain.flag_in === 1) {
+                    const flagIn = document.createElement("span");
+                    flagIn.textContent = "flag_in";
+                    flagIn.style.color = "green";
+                    flagsInfo.appendChild(flagIn);
+                }
+
+                if (chain.flag_out === 1) {
+                    const flagOut = document.createElement("span");
+                    flagOut.textContent = "flag_out";
+                    flagOut.style.color = "red";
+                    if (flagsInfo.childNodes.length > 0) {
+                        flagsInfo.appendChild(document.createTextNode(" | "));
+                    }
+                    flagsInfo.appendChild(flagOut);
+                }
+
+                chainItem.appendChild(flagsInfo);
+
+                chainItem.onclick = () => fetchChainDetails(chain.id);
+                chainList.appendChild(chainItem);
             }
 
-            chainItem.appendChild(flagsInfo);
-
-            chainItem.onclick = () => fetchChainDetails(chain.id);
-            chainList.prepend(chainItem);
+            if (isScrolledToBottom) {
+                chainList.scrollTop = chainList.scrollHeight;
+            }
         }
 
         async function fetchChainDetails(chainId) {
