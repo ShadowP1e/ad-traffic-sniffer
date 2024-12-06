@@ -1,5 +1,4 @@
 import json
-import logging
 import sqlite3
 
 from utils.search_flags import contains_pattern
@@ -92,7 +91,6 @@ class ChainStorage:
 
     def add_new_chain(self, client_ip: str, service_ip: str, service_port: str, log_id: int, timestamp: int):
         flag_in, flag_out = self.conn.execute('SELECT flag_in, flag_out FROM logs WHERE id = ?', (log_id,)).fetchone()
-        logging.info(f"{flag_in}, {flag_out}")
 
         with self.conn:
             cursor = self.conn.execute('''
